@@ -1,0 +1,25 @@
+{
+  "hooks": {
+    "Notification": [
+      {
+        "hooks": [
+          { "type": "command", "command": "$HOME/notch-notify/scripts/notify-bridge.sh notification" }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "$HOME/notch-notify/scripts/notify-bridge.sh stop" }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          { "type": "command", "command": "$HOME/notch-notify/scripts/pre-tool-use.py" }
+        ]
+      }
+    ]
+  }
+}
