@@ -76,7 +76,7 @@ is a valid starter file.
       { "hooks": [ { "type": "command", "command": "$HOME/notch-notify/scripts/notify-bridge.sh stop" } ] }
     ],
     "PreToolUse": [
-      { "hooks": [ { "type": "command", "command": "$HOME/notch-notify/scripts/pre-tool-use.py" } ] }
+      { "matcher": "*", "hooks": [ { "type": "command", "command": "$HOME/notch-notify/scripts/pre-tool-use.py" } ] }
     ]
   }
 }
@@ -84,6 +84,13 @@ is a valid starter file.
 
 If you don't want in-bubble tool approvals, omit the `PreToolUse` block — the
 notification and stop bubbles work standalone.
+
+The `matcher` is what decides which tools NotchNotify ever sees. `"*"` routes
+every tool through the bubble (mutating tools always gate; read-only tools pass
+straight through when they stay inside the project root — see
+`README` → *Compatibility notes*). Narrow it to e.g. `"Bash|Edit|Write"` if you
+only want file/command approvals and would rather leave `WebFetch` etc. to
+Claude Code's own prompt.
 
 ### Test it
 

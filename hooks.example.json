@@ -16,6 +16,7 @@
     ],
     "PreToolUse": [
       {
+        "matcher": "*",
         "hooks": [
           { "type": "command", "command": "$HOME/notch-notify/scripts/pre-tool-use.py" }
         ]
