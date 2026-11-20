@@ -96,6 +96,9 @@ final class SocketServer {
 
     private func handleNotify(obj: [String: Any]) {
         guard FeatureToggle.shared.isEnabled else { return }
+        // Auto-approve mode can also mute one-way bubbles (task done / needs input).
+        let toggle = FeatureToggle.shared
+        if toggle.isAutoApproving && toggle.autoApproveHidesNotifications { return }
         let kind = (obj["kind"] as? String) ?? "notification"
         let title = (obj["title"] as? String) ?? "Claude"
         let body = (obj["body"] as? String) ?? ""
@@ -148,6 +151,15 @@ final class SocketServer {
         // Auto-allow via session / always store
         if PermissionStore.shared.matchesSession(glob) {
             reply(fd: clientFD, decision: .allowSession, silent: true)
+            return
+        }
+
+        // Auto-approve mode: levels the user opted into skip the bubble entirely.
+        // Levels left unchecked (e.g. danger) still fall through to the request UI.
+        // `forceShow` lets the menu-bar test items preview the bubble regardless.
+        let forceShow = (obj["forceShow"] as? Bool) ?? false
+        if !forceShow, FeatureToggle.shared.shouldAutoApprove(level: assessment.level) {
+            reply(fd: clientFD, decision: .allowOnce, silent: true)
             return
         }
 

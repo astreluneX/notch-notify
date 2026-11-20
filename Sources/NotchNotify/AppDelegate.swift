@@ -24,7 +24,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let menu = NSMenu()
         let toggleItem = NSMenuItem(title: "Enabled", action: #selector(toggleEnabled), keyEquivalent: "")
+        toggleItem.tag = MenuTag.enabled.rawValue
         menu.addItem(toggleItem)
+        menu.addItem(makeAutoApproveMenuItem())
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Test notify (Notification/Stop 样式)", action: #selector(testNotify), keyEquivalent: "n"))
         menu.addItem(NSMenuItem(title: "Test request · Bash safe (collapsed)", action: #selector(testBashSafe), keyEquivalent: "1"))
@@ -44,15 +46,98 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             name: FeatureToggle.didChange, object: nil)
     }
 
+    private enum MenuTag: Int {
+        case enabled = 100
+        case autoApprove = 101
+        case silenceNotifications = 102
+        case safeLevel = 110   // 110 + 0/1/2 → safe / action / danger
+    }
+
     @objc private func toggleEnabled() {
         FeatureToggle.shared.isEnabled.toggle()
     }
 
+    /// Checkable "Auto-approve" item with a submenu: on/off, which risk levels to
+    /// auto-approve, and whether Notification / Stop bubbles are muted too.
+    private func makeAutoApproveMenuItem() -> NSMenuItem {
+        let item = NSMenuItem(title: "Auto-approve (no click)", action: nil, keyEquivalent: "")
+        item.tag = MenuTag.autoApprove.rawValue
+        let sub = NSMenu()
+
+        let onOff = NSMenuItem(title: "Enabled", action: #selector(toggleAutoApprove), keyEquivalent: "")
+        onOff.tag = MenuTag.autoApprove.rawValue
+        sub.addItem(onOff)
+        sub.addItem(.separator())
+
+        let levelsTitle = NSMenuItem(title: "Auto-approve risk levels", action: nil, keyEquivalent: "")
+        levelsTitle.isEnabled = false
+        sub.addItem(levelsTitle)
+        let levelTitles: [(RiskLevel, String)] = [
+            (.safe, "safe — read-only tools"),
+            (.action, "action — Bash / Edit / new files"),
+            (.danger, "danger — rm -rf, force push, .env, overwrite"),
+        ]
+        for (index, level) in levelTitles.enumerated() {
+            let levelItem = NSMenuItem(title: level.1, action: #selector(toggleAutoApproveLevel(_:)), keyEquivalent: "")
+            levelItem.tag = MenuTag.safeLevel.rawValue + index
+            sub.addItem(levelItem)
+        }
+        sub.addItem(.separator())
+        let silence = NSMenuItem(title: "Also silence Notification / Stop", action: #selector(toggleSilenceNotifications), keyEquivalent: "")
+        silence.tag = MenuTag.silenceNotifications.rawValue
+        sub.addItem(silence)
+
+        for subItem in sub.items where subItem.action != nil { subItem.target = self }
+        item.submenu = sub
+        return item
+    }
+
+    @objc private func toggleAutoApprove() {
+        FeatureToggle.shared.autoApprove.toggle()
+    }
+
+    @objc private func toggleAutoApproveLevel(_ sender: NSMenuItem) {
+        let index = sender.tag - MenuTag.safeLevel.rawValue
+        guard FeatureToggle.allLevels.indices.contains(index) else { return }
+        let level = FeatureToggle.allLevels[index]
+        var levels = FeatureToggle.shared.autoApproveLevels
+        if levels.contains(level) { levels.remove(level) } else { levels.insert(level) }
+        FeatureToggle.shared.autoApproveLevels = levels
+    }
+
+    @objc private func toggleSilenceNotifications() {
+        FeatureToggle.shared.autoApproveHidesNotifications.toggle()
+    }
+
     @objc private func refreshToggleUI() {
-        let enabled = FeatureToggle.shared.isEnabled
-        statusItem.button?.title = enabled ? "🔔" : "🔕"
-        if let item = statusItem.menu?.items.first {
-            item.state = enabled ? .on : .off
+        let toggle = FeatureToggle.shared
+        let enabled = toggle.isEnabled
+        let auto = toggle.isAutoApproving
+        statusItem.button?.title = !enabled ? "🔕" : (auto ? "🚀" : "🔔")
+        if let menu = statusItem.menu {
+            for item in menu.items {
+                switch item.tag {
+                case MenuTag.enabled.rawValue:
+                    item.state = enabled ? .on : .off
+                case MenuTag.autoApprove.rawValue:
+                    item.state = auto ? .on : .off
+                    item.submenu?.items.first?.state = toggle.autoApprove ? .on : .off
+                    // Levels are inert while auto-approve is off — grey them out.
+                    for sub in item.submenu?.items ?? [] {
+                        let index = sub.tag - MenuTag.safeLevel.rawValue
+                        if FeatureToggle.allLevels.indices.contains(index) {
+                            let level = FeatureToggle.allLevels[index]
+                            sub.state = toggle.autoApproveLevels.contains(level) ? .on : .off
+                            sub.isEnabled = toggle.autoApprove
+                        } else if sub.tag == MenuTag.silenceNotifications.rawValue {
+                            sub.state = toggle.autoApproveHidesNotifications ? .on : .off
+                            sub.isEnabled = toggle.autoApprove
+                        }
+                    }
+                default:
+                    break
+                }
+            }
         }
         // When disabled, retract any bubble that's mid-flight so it doesn't stick.
         if !enabled { panel.orderOut(nil) }
@@ -109,7 +194,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "cwd": cwd,
             "sourceApp": "com.apple.Terminal",
             "toolInput": input,
-            "timestamp": Date().timeIntervalSince1970
+            "timestamp": Date().timeIntervalSince1970,
+            "forceShow": true   // test items always preview the bubble, even in auto-approve mode
         ]
         // Speak to our own socket so full pipeline (risk analysis, panel, decision) is exercised.
         DispatchQueue.global().async {

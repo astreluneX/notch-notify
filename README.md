@@ -21,6 +21,34 @@ because you switched windows.
 Falls back to a plain `osascript` notification if the app isn't running, so
 Claude Code never blocks.
 
+## Auto-approve (no click)
+
+Click the menu-bar icon → **Auto-approve (no click)** → **Enabled**. While it's
+on, tool requests skip the bubble and are approved immediately — nothing to click.
+The submenu lets you choose exactly which risk levels auto-approve:
+
+| Level | Covers |
+| --- | --- |
+| `safe` | Read / Grep / Glob / WebFetch / WebSearch |
+| `action` | Bash, Edit, Write to a new file |
+| `danger` | `rm -rf`, `sudo`, force-push, `.env` / `.ssh`, overwriting an existing file |
+
+Default selection is `safe` + `action`; `danger` still prompts until you tick it
+yourself. **Also silence Notification / Stop** (on by default) mutes the one-way
+bubbles too, so auto-approve really means silence.
+
+The menu icon turns 🚀 when auto-approve is active, 🔔 when only normal mode is
+on, 🔕 when the whole app is disabled. Settings persist across restarts.
+
+Equivalent defaults keys if you'd rather script it:
+
+```bash
+defaults write NotchNotify "NotchNotify.autoApprove" -bool true
+defaults write NotchNotify "NotchNotify.autoApproveLevels" -array safe action danger
+defaults write NotchNotify "NotchNotify.autoApproveHidesNotifications" -bool true
+launchctl kickstart -k gui/$(id -u)/com.xindaoyan.notchnotify   # or restart the app
+```
+
 ## Install
 
 ```bash
@@ -111,7 +139,7 @@ notch-notify/
 │   ├── RiskAnalyzer.swift       # safe / action / danger heuristics
 │   ├── PermissionStore.swift    # session/always allow rules
 │   ├── PendingRequest.swift     # in-flight approval requests
-│   └── FeatureToggle.swift      # menu-bar on/off switch
+│   └── FeatureToggle.swift      # master on/off + auto-approve levels
 └── scripts/
     ├── notify-bridge.sh         # Notification / Stop bridge (non-blocking)
     └── pre-tool-use.py          # PreToolUse bridge (blocking, 30s timeout)
